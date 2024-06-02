@@ -1,4 +1,3 @@
-use csv::ReaderBuilder;
 use extendr_api::prelude::*;
 use faer::sparse::*;
 use rayon::prelude::*;
@@ -14,10 +13,7 @@ fn rust_calibrate(
     calbp: &[f64],
     c14bp: &[f64],
     tau: &[f64],
-    // path_to_calibration: &str,
 ) -> ExternalPtr<SparseColMat<usize, f64>> {
-    // let [calbp, c14bp, tau] = read_14c(path_to_calibration);
-
     let c14out: Vec<f64> = (start..end)
         .step_by(1)
         .rev()
@@ -33,28 +29,6 @@ fn rust_calibrate(
     );
 
     ExternalPtr::new(c14pd)
-}
-
-fn read_14c(path_to_calibration: &str) -> [Vec<f64>; 3] {
-    let mut rdr = ReaderBuilder::new()
-        .has_headers(false)
-        .comment(Some(b'#'))
-        .from_path(path_to_calibration)
-        .unwrap();
-
-    let mut calbp: Vec<f64> = Vec::new();
-    let mut c14bp: Vec<f64> = Vec::new();
-    let mut tau: Vec<f64> = Vec::new();
-
-    for result in rdr.records() {
-        let record = result.unwrap();
-
-        calbp.push(record[0].parse::<f64>().unwrap());
-        c14bp.push(record[1].parse::<f64>().unwrap());
-        tau.push(record[2].parse::<f64>().unwrap());
-    }
-
-    [calbp, c14bp, tau]
 }
 
 fn calibrate_bp14c(
