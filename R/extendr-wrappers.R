@@ -10,7 +10,7 @@
 #' @useDynLib rscarbon, .registration = TRUE
 NULL
 
-rust_calibrate <- function(age, error, start, end, precision, path_to_calibration) .Call(wrap__rust_calibrate, age, error, start, end, precision, path_to_calibration)
+rust_calibrate <- function(age, error, start, end, precision, calbp, c14bp, tau) .Call(wrap__rust_calibrate, age, error, start, end, precision, calbp, c14bp, tau)
 
 
 # nolint end
