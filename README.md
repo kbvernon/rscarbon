@@ -1,0 +1,81 @@
+
+
+# rscarbon
+
+<!-- badges: start -->
+
+[![Lifecycle:
+experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://www.tidyverse.org/lifecycle/#experimental)
+
+<!-- badges: end -->
+
+The `{rscarbon}` package combines functionality in
+[`{rcarbon}`](https://github.com/ahb108/rcarbon) and
+[`{Bchron}`](https://github.com/andrewcparnell/Bchron) with the fearless
+concurrency of Rust. Right now, it’s highly experimental, and it’s
+mainly an opportunity to learn Rust and
+[extendr](https://github.com/extendr/extendr). And to get a handle on
+this whole radiocarbon dating thing…
+
+I’ve also been digging into
+[`{baydem}`](https://github.com/eehh-stanford/baydem), and the use of
+Gaussian Mixture Models makes a lot of sense, but I need to think more
+about that before trying to implement something that complicated in
+Rust.
+
+<!-- In terms of its motivation, one of the big shortcomings of **rcarbon** and  -->
+<!-- **Bchron** is the data model they assume for calibrated radiocarbon dates, in  -->
+<!-- each case a list of vectors of probability densities associated with each  -->
+<!-- radiocarbon date. This is extremely inefficient, with loads of zeroes in the  -->
+<!-- case of **Bchron** and costly merges and sorting in the case of **rcarbon**. A  -->
+<!-- better alternative is a (compressed column) sparse matrix, since it keeps the  -->
+<!-- calendar dates (columns) aligned without having to store the zeroes, too. Right  -->
+<!-- now, I've implemented that with the [faer](https://github.com/sarah-ek/faer-rs)  -->
+<!-- crate in Rust - because that crate is just insanely fast, has loads of support,  -->
+<!-- and the extendr team is working hard to make conversions with their types simple  -->
+<!-- and safe.  -->
+
+## Installation
+
+You can - but you shouldn’t! - install the development version of
+**rscarbon** from [GitHub](https://github.com/) with:
+
+``` r
+# install.packages("pak")
+pak::pkg_install("kbvernon/rscarbon")
+```
+
+## Example
+
+Right now, I’ve only figured out how to do the caibration, which is
+small potatoes in the grand scheme of things, though a crucial first
+step. Will do a performance test at some point, but need to make sure
+I’m doing a fair comparisons first. That said, the results look
+promising.
+
+``` r
+library(Bchron)
+library(rcarbon)
+library(rextendr)
+library(rscarbon)
+library(tidyverse)
+
+data(emedyd)
+
+c14 <- emedyd |>
+  as_tibble() |>
+  rename_with(str_to_lower)
+
+rm(emedyd)
+
+ages <- c14$cra
+errors <- c14$error
+
+bench::mark(
+  bchron = Bchron::BchronCalibrate(ages, errors),
+  rcarbon = rcarbon::calibrate(ages, errors, verbose = FALSE, ncores = 4),
+  rscarbon = rscarbon::calibrate(ages, errors),
+  iterations = 100,
+  check = FALSE
+) |> select(expression, median, 'itr/sec')
+```
