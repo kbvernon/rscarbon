@@ -1,7 +1,46 @@
+use csv::ReaderBuilder;
 use extendr_api::prelude::*;
 use faer::sparse::*;
 use rayon::prelude::*;
 use statrs::distribution::{Continuous, Normal};
+
+#[derive(Debug)]
+struct Calibration {
+    pub calbp: Vec<f64>,
+    pub c14bp: Vec<f64>,
+    pub tau: Vec<f64>
+}
+
+#[extendr]
+impl Calibration {
+
+    fn read_14c(path_to_calibration: &str) -> Self {
+
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(false)
+            .comment(Some(b'#'))
+            .from_path(path_to_calibration)
+            .unwrap();
+
+        let mut calbp: Vec<f64> = Vec::new();
+        let mut c14bp: Vec<f64> = Vec::new();
+        let mut tau: Vec<f64> = Vec::new();
+
+        for result in rdr.records() {
+
+            let record = result.unwrap();
+
+            calbp.push(record[0].parse::<f64>().unwrap());
+            c14bp.push(record[1].parse::<f64>().unwrap());
+            tau.push(record[2].parse::<f64>().unwrap());
+
+        }
+
+        Self { calbp, c14bp, tau }
+
+    }
+
+}
 
 #[extendr]
 fn rust_calibrate(
@@ -10,10 +49,11 @@ fn rust_calibrate(
     start: i32,
     end: i32,
     precision: f64,
-    calbp: &[f64],
-    c14bp: &[f64],
-    tau: &[f64],
+    calibration: &Calibration,
 ) -> ExternalPtr<SparseColMat<usize, f64>> {
+
+    let Calibration {calbp, c14bp, tau} = calibration;
+
     let c14out: Vec<f64> = (start..end)
         .step_by(1)
         .rev()
@@ -93,4 +133,5 @@ fn linear_model(x1: f64, x2: f64, y1: f64, y2: f64, xout: f64) -> f64 {
 extendr_module! {
     mod rscarbon;
     fn rust_calibrate;
+    impl Calibration;
 }
