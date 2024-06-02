@@ -8,14 +8,12 @@ use statrs::distribution::{Continuous, Normal};
 struct Calibration {
     pub calbp: Vec<f64>,
     pub c14bp: Vec<f64>,
-    pub tau: Vec<f64>
+    pub tau: Vec<f64>,
 }
 
 #[extendr]
 impl Calibration {
-
     fn read_14c(path_to_calibration: &str) -> Self {
-
         let mut rdr = ReaderBuilder::new()
             .has_headers(false)
             .comment(Some(b'#'))
@@ -27,19 +25,15 @@ impl Calibration {
         let mut tau: Vec<f64> = Vec::new();
 
         for result in rdr.records() {
-
             let record = result.unwrap();
 
             calbp.push(record[0].parse::<f64>().unwrap());
             c14bp.push(record[1].parse::<f64>().unwrap());
             tau.push(record[2].parse::<f64>().unwrap());
-
         }
 
         Self { calbp, c14bp, tau }
-
     }
-
 }
 
 #[extendr]
