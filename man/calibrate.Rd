@@ -4,7 +4,13 @@
 \alias{calibrate}
 \title{Title}
 \usage{
-calibrate(c14_age, c14_error, calibration_tbl, precision = 1e-05)
+calibrate(
+  c14_age,
+  c14_error,
+  calibration_tbl,
+  precision = 1e-05,
+  normalize = TRUE
+)
 }
 \arguments{
 \item{c14_age}{a numeric vector of uncalibrated radiocarbon ages}

@@ -29,7 +29,8 @@ fn rs_calibrate(
     cal_age: &[f64],
     est_age: &[f64],
     est_error: &[f64],
-    precision: f64
+    precision: f64,
+    normalize: bool
 ) -> ExternalPtr<SparseColMat<usize, f64>> {
 
     // <i, j> is the <row, column> coordinate in the csc matrix
@@ -62,50 +63,88 @@ fn rs_calibrate(
         &res
     ).unwrap();
 
-    ExternalPtr::new(grid)
+    if normalize {
+
+        let row_sums: Vec<f64> = grid.as_ref().row_sums();
+
+        let tuples = row_sums.iter()
+            .enumerate()
+            .map(|(i, x)| (i, i, 1.0/x))
+            .collect::<Vec<(usize, usize, f64)>>();
+
+        let diagonal = SparseColMat::<usize, f64>::try_new_from_triplets(
+            row_sums.len(),
+            row_sums.len(),
+            &tuples
+        ).unwrap();
+
+        ExternalPtr::new(diagonal * grid)
+
+    } else {
+
+        ExternalPtr::new(grid)
+
+    }
 
 }
 
 pub trait SparseSums {
-    fn row_sums(&self) -> Vec<f64>;
     fn col_sums(&self) -> Vec<f64>;
+    fn row_sums(&self) -> Vec<f64>;
 }
+
 impl SparseSums for SparseColMatRef<'_, usize, f64> {
+
+    fn col_sums(&self) -> Vec<f64> {
+
+        let row_indices = self.row_indices();
+        let col_ptrs = self.col_ptrs();
+
+        let mut colsums = vec![0_f64; self.ncols()];
+
+        for col in 0..self.ncols() {
+
+            let s = col_ptrs[col];
+            let e = col_ptrs[col + 1];
+
+            let col_row_indices = &row_indices[s..e];
+
+            for row in col_row_indices {
+                colsums[col] += self.get(*row, col).unwrap();
+            }
+
+        }
+
+        colsums
+
+    }
+
     fn row_sums(&self) -> Vec<f64> {
+
+        // might consider col_sums(self.transpose()) at some point
+
         let row_indices = self.row_indices();
         let col_ptrs = self.col_ptrs();
 
         let mut rowsums = vec![0_f64; self.nrows()];
+
         for col in 0..self.ncols() {
-            let col_row_indices = &row_indices[col_ptrs[col]..col_ptrs[col + 1]];
+
+            let s = col_ptrs[col];
+            let e = col_ptrs[col + 1];
+
+            let col_row_indices = &row_indices[s..e];
+
             for row in col_row_indices {
                 rowsums[*row] += self.get(*row, col).unwrap();
             }
+
         }
 
         rowsums
+
     }
 
-    fn col_sums(&self) -> Vec<f64> {
-        let row_indices = self.row_indices();
-        let col_ptrs = self.col_ptrs();
-
-        let mut rowsums = vec![0_f64; self.ncols()];
-        for col in 0..self.ncols() {
-            let col_row_indices = &row_indices[col_ptrs[col]..col_ptrs[col + 1]];
-            for row in col_row_indices {
-                rowsums[col] += self.get(*row, col).unwrap();
-            }
-        }
-
-        rowsums
-    }
-}
-
-#[extendr]
-fn rowsums(mat: ExternalPtr<SparseColMat<usize, f64>>) -> Vec<f64> {
-    let mat = mat.as_ref();
-    mat.as_ref().row_sums()
 }
 
 #[cfg(test)]
@@ -123,7 +162,14 @@ mod tests {
             &[(0, 0, 1.), (1, 1, 1.), (2, 2, 1.), (3, 3, 1.)],
         )
         .unwrap();
-        assert_eq!(sparse_id5.as_ref().row_sums(), vec![1., 1., 1., 1.]);
+        assert_eq!(
+            sparse_id5.as_ref().row_sums(),
+            vec![1., 1., 1., 1.]
+        );
+        assert_eq!(
+            sparse_id5.as_ref().col_sums(),
+            vec![1., 1., 1., 1., 0., 0., 0., 0.]
+        );
     }
 }
 

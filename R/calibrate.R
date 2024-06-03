@@ -1,22 +1,28 @@
 
-#' Title
+#' Calibrate radiocarbon measurements
 #'
 #' @param c14_age a numeric vector of uncalibrated radiocarbon ages
 #' @param c14_error a numeric vector of uncalibrated radiocarbon errors
 #' @param calibration_tbl a `Calibration` table
 #' @param precision a numeric scalar with the desired precision, meaning
 #' the value at which smaller densities are set to zero (default 1e-5)
+#' @param normalize a logical scalar, if TRUE (default) then each probability
+#' distribution is normalized.
 #'
-#' @return a list of probability density distributions, with length equal to
-#' `length(age)`
+#' @return a [CalGrid], strictly an integer vector of row IDs with an
+#' attribute containing an external pointer to where the sparse matrix is held
+#' in memory.
+#'
 #' @export
 #'
 #' @examples
+#'
 calibrate <- function(
   c14_age,
   c14_error,
   calibration_tbl,
-  precision = 1e-5
+  precision = 1e-5,
+  normalize = TRUE
 ){
 
   if (!is_calibration(calibration_tbl)){
@@ -34,7 +40,8 @@ calibrate <- function(
     cal_age = calibration_tbl[["cal_age"]],
     est_age = calibration_tbl[["est_age"]],
     est_error = calibration_tbl[["est_error"]],
-    precision = as.numeric(precision)
+    precision = as.numeric(precision),
+    normalize = normalize
   )
 
   vctrs::new_vctr(

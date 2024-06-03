@@ -12,9 +12,7 @@ NULL
 
 rs_interpolate_linear <- function(x, y, xout) .Call(wrap__rs_interpolate_linear, x, y, xout)
 
-rs_calibrate <- function(c14_age, c14_error, cal_age, est_age, est_error, precision) .Call(wrap__rs_calibrate, c14_age, c14_error, cal_age, est_age, est_error, precision)
-
-rowsums <- function(mat) .Call(wrap__rowsums, mat)
+rs_calibrate <- function(c14_age, c14_error, cal_age, est_age, est_error, precision, normalize) .Call(wrap__rs_calibrate, c14_age, c14_error, cal_age, est_age, est_error, precision, normalize)
 
 
 # nolint end
