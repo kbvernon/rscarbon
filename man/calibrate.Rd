@@ -4,17 +4,17 @@
 \alias{calibrate}
 \title{Title}
 \usage{
-calibrate(c14_age, c14_error, calibration, precision = 1e-05)
+calibrate(c14_age, c14_error, calibration_tbl, precision = 1e-05)
 }
 \arguments{
-\item{calibration}{an object of class \code{Calibration} built using \code{read_14c()}}
+\item{c14_age}{a numeric vector of uncalibrated radiocarbon ages}
+
+\item{c14_error}{a numeric vector of uncalibrated radiocarbon errors}
+
+\item{calibration_tbl}{a \code{Calibration} table}
 
 \item{precision}{a numeric scalar with the desired precision, meaning
 the value at which smaller densities are set to zero (default 1e-5)}
-
-\item{measured_age}{a numeric vector of uncalibrated radiocarbon ages}
-
-\item{measured_error}{a numeric vector of uncalibrated radiocarbon errors}
 }
 \value{
 a list of probability density distributions, with length equal to

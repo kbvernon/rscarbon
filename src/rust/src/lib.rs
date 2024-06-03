@@ -34,12 +34,10 @@ fn rs_calibrate(
 
     // <i, j> is the <row, column> coordinate in the csc matrix
 
-    let res = c14_age.into_par_iter()
-        .zip(c14_error.into_par_iter())
+    let res = (c14_age, c14_error).into_par_iter()
         .enumerate()
         .flat_map(|(i, (&c14_mu, &c14_s))| {
-            est_age.iter()
-                .zip(est_error.iter())
+            (est_age, est_error).into_par_iter()
                 .enumerate()
                 .filter_map(|(j, (&est_mu, &est_s))| {
 
