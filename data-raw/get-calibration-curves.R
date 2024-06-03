@@ -2,12 +2,18 @@
 
 get_14c <- function(x){
 
-  readr::read_csv(
+  res <- readr::read_csv(
     file.path("https://intcal.org/", "curves", x),
     skip = 11,
     col_select = 1:3,
-    col_names = c("calbp", "c14bp", "tau"),
-    col_types = "i"
+    col_names = c("cal_age", "est_age", "est_error"),
+    col_types = "d"
+  )
+
+  vctrs::new_data_frame(
+    res,
+    cal_name = tools::file_path_sans_ext(x),
+    class = c("Calibration", "tbl_df", "tbl")
   )
 
 }
