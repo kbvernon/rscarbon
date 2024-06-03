@@ -134,5 +134,4 @@ extendr_module! {
     mod rscarbon;
     fn rs_interpolate_linear;
     fn rs_calibrate;
-    fn rowsums;
 }
