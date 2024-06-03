@@ -1,13 +1,11 @@
 
 #' Title
 #'
-#' @param age a numeric vector of uncalibrated radiocarbon ages
-#' @param error a numeric vector of uncalibrated radiocarbon errors
-#' @param time_range a vector of length two with start and end dates
-#' (note that start > end)
-#' @param precision a scalar numeric vector with the desired precision, meaning
-#' the value at which smaller densities are set to zero
-#' @param calibration an object of class `Calibration` built using `read_14c()`
+#' @param c14_age a numeric vector of uncalibrated radiocarbon ages
+#' @param c14_error a numeric vector of uncalibrated radiocarbon errors
+#' @param calibration_tbl a `Calibration` table
+#' @param precision a numeric scalar with the desired precision, meaning
+#' the value at which smaller densities are set to zero (default 1e-5)
 #'
 #' @return a list of probability density distributions, with length equal to
 #' `length(age)`
@@ -15,34 +13,35 @@
 #'
 #' @examples
 calibrate <- function(
-  age,
-  error,
-  time_range = c(55000, 0),
-  calibration = "intcal20",
+  c14_age,
+  c14_error,
+  calibration_tbl,
   precision = 1e-5
 ){
 
-  all_calibrations <- c(
-    "intcal13", "intcal13nhpine16", "intcal20", "marine13", "marine20",
-    "normal", "shcal13", "shcal13shkauri16", "shcal20"
-  )
+  if (!is_calibration(calibration_tbl)){
 
-  if (!calibration %in% all_calibrations) {
-
-    cli::cli_abort(
-      "{calibration} is not a recognized calibration curve.",
-      "i" = "Available curves include {all_calibrations}."
-    )
+    cli::cli_abort(c(
+      "{.var calibration_tbl} must be a {.cls Calibration} table.",
+      "i" = "You supplied a {.cls {class(calibration_tbl)}}."
+    ))
 
   }
 
-  rust_calibrate(
-    age = as.numeric(age),
-    error = as.numeric(error),
-    start = as.integer(time_range[2]),
-    end = as.integer(time_range[1]),
-    precision = as.numeric(precision),
-    calbs
+  ptr <- rs_calibrate(
+    c14_age = as.numeric(c14_age),
+    c14_error = as.numeric(c14_error),
+    cal_age = calibration_tbl[["cal_age"]],
+    est_age = calibration_tbl[["est_age"]],
+    est_error = calibration_tbl[["est_error"]],
+    precision = as.numeric(precision)
+  )
+
+  vctrs::new_vctr(
+    1:length(c14_age),
+    extptr = ptr,
+    class = "CalGrid"
   )
 
 }
+

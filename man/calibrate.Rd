@@ -4,27 +4,17 @@
 \alias{calibrate}
 \title{Title}
 \usage{
-calibrate(
-  age,
-  error,
-  time_range = c(55000, 0),
-  calibration = "intcal20",
-  precision = 1e-05
-)
+calibrate(c14_age, c14_error, calibration, precision = 1e-05)
 }
 \arguments{
-\item{age}{a numeric vector of uncalibrated radiocarbon ages}
+\item{calibration}{an object of class \code{Calibration} built using \code{read_14c()}}
 
-\item{error}{a numeric vector of uncalibrated radiocarbon errors}
+\item{precision}{a numeric scalar with the desired precision, meaning
+the value at which smaller densities are set to zero (default 1e-5)}
 
-\item{time_range}{a vector of length two with start and end dates
-(note that start > end)}
+\item{measured_age}{a numeric vector of uncalibrated radiocarbon ages}
 
-\item{calibration}{a scalar character vector with the name of the calibration
-curve}
-
-\item{precision}{a scalar numeric vector with the desired precision, meaning
-the value at which smaller densities are set to zero}
+\item{measured_error}{a numeric vector of uncalibrated radiocarbon errors}
 }
 \value{
 a list of probability density distributions, with length equal to
