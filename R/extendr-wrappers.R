@@ -10,17 +10,9 @@
 #' @useDynLib rscarbon, .registration = TRUE
 NULL
 
-rust_calibrate <- function(age, error, start, end, precision, calbs) .Call(wrap__rust_calibrate, age, error, start, end, precision, calbs)
+rs_interpolate_linear <- function(x, y, xout) .Call(wrap__rs_interpolate_linear, x, y, xout)
 
-Calibration <- new.env(parent = emptyenv())
-
-Calibration$read_14c <- function(path_to_calibration) .Call(wrap__Calibration__read_14c, path_to_calibration)
-
-#' @export
-`$.Calibration` <- function (self, name) { func <- Calibration[[name]]; environment(func) <- environment(); func }
-
-#' @export
-`[[.Calibration` <- `$.Calibration`
+rs_calibrate <- function(c14_age, c14_error, cal_age, est_age, est_error, precision) .Call(wrap__rs_calibrate, c14_age, c14_error, cal_age, est_age, est_error, precision)
 
 
 # nolint end
