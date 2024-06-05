@@ -5,7 +5,9 @@ knitr:
     collapse: true
     comment: "#>" 
     fig.path: "man/figures/README-"
-    out.width: "100%"
+    out.width: "60%"
+execute: 
+  warning: false
 ---
 
 # rscarbon
@@ -29,28 +31,6 @@ I've also been digging into
 Mixture Models makes a lot of sense, but I need to think more about that before
 trying to implement something that complicated in Rust.
 
-<!-- In terms of its motivation, one of the big shortcomings of **rcarbon** and  -->
-
-<!-- **Bchron** is the data model they assume for calibrated radiocarbon dates, in  -->
-
-<!-- each case a list of vectors of probability densities associated with each  -->
-
-<!-- radiocarbon date. This is extremely inefficient, with loads of zeroes in the  -->
-
-<!-- case of **Bchron** and costly merges and sorting in the case of **rcarbon**. A  -->
-
-<!-- better alternative is a (compressed column) sparse matrix, since it keeps the  -->
-
-<!-- calendar dates (columns) aligned without having to store the zeroes, too. Right  -->
-
-<!-- now, I've implemented that with the [faer](https://github.com/sarah-ek/faer-rs)  -->
-
-<!-- crate in Rust - because that crate is just insanely fast, has loads of support,  -->
-
-<!-- and the extendr team is working hard to make conversions with their types simple  -->
-
-<!-- and safe.  -->
-
 ## Installation
 
 You can - but you shouldn't! - install the development version of **rscarbon**
@@ -61,39 +41,268 @@ from [GitHub](https://github.com/) with:
 pak::pkg_install("kbvernon/rscarbon")
 ```
 
-## Example
+## Radiocarbon calibration
 
-Right now, I've only figured out how to do the caibration, which is small 
-potatoes in the grand scheme of things, though a crucial first step. Will do a 
-performance test at some point, but need to make sure I'm doing a fair 
-comparisons first. That said, the results look promising.
+If I were to manually do radiocarbon calibration in R, it would basically look 
+like this.
+
+```{r}
+library(rcarbon)
+library(rscarbon)
+library(tidyverse)
+
+# radiocarbon dataset
+c14 <- rcarbon::emedyd |>
+  as_tibble() |>
+  rename_with(str_to_lower) |> 
+  select(cra, error) |> 
+  rename("c14_age" = cra, "c14_error" = error) |> 
+  slice(1:10)
+
+c14
+
+# calibration curve
+rscarbon::intcal20
+
+```
+
+The `c14` table has two important variables:
+
+-   `c14_age` = the estimated "age" of the sample derived by radiocarbon dating
+-   `c14_error` = the estimated error or uncertainty, more precisely the
+    "measurement" error
+
+The `intcal20` calibration curve has three variables:
+
+-   `ybp` = years before present (BP), the "true" calendar years
+-   `cal_age` = calibrated years BP, the calibration years
+-   `cal_error` = calibration error
+
+The calibration ages and errors in the calibration "curve", in effect, define a
+set of normal distributions, one for each calendar year BP. So, the curve is
+basically a "mixture" of Gaussians.
+
+Note: technically, the variance in these Gaussians is the combined error from
+the calibration curve and the c14 sample.
+
+You may have noticed that the calibration curve only defines Gaussians for an
+irregular interval of years before present (BP), so the first thing we need to
+do is use linear interpolation to expand the calibration curve so that it
+includes those intervening years. 
+
+But, before we even do that, let's define a time window for our analysis, so we 
+don't perform unnecessary calculations. 
+
+```{r}
+# include fairly large offset to avoid edge effects
+time_window <- rev(range(c14[["c14_age"]])) + c(2500, -2500)
+
+intcal20 <- intcal20 |> 
+  filter(
+    ybp <= time_window[1], 
+    ybp >= time_window[2]
+  )
+
+```
+
+Now, we can interpolate ages and errors within this restricted curve.
+
+```{r}
+intcal20 <- with(
+  intcal20, {
+
+    # define the set of years that we want to interpolate over    
+    xout <- seq(max(ybp), min(ybp), by = -1)
+    
+    # interpolate the calibration age and error
+    int_cal_age <- approx(ybp, cal_age, xout = xout)[["y"]]
+    int_cal_error <- approx(ybp, cal_error, xout = xout)[["y"]]
+    
+    tibble(
+      ybp = xout,
+      cal_age = int_cal_age,
+      cal_error = int_cal_error
+    )
+    
+  }
+  
+)
+
+intcal20
+
+```
+
+With this expanded curve, we can now estimate the probability density that a c14 
+age was actually produced in any given calendar year BP. 
+
+A couple of things to note here:
+
+1. The closer the `c14_age` gets to the `cal_age` for a specific calendar year or `ybp`, the 
+greater its probability density is for that `ybp`.  
+2. A threshold `eps` is often applied to the density estimates. And density 
+`d < eps` is set to zero. The standard is `eps = 1e-5`.  
+3. The vector of densities is often normalized, too: `d/sum(d)`.
+
+```{r}
+# this is a smidge hard to read because of the nested map calls
+get_density <- function(c14_age, c14_error, calibration_curve){
+  
+  d <- purrr::pmap_dbl(
+    calibration_curve, 
+    \(ybp, cal_age, cal_error){
+      
+      dnorm(
+        c14_age, 
+        mean = cal_age, 
+        sd = sqrt(c14_error^2 + cal_error^2)
+      )
+      
+    })
+  
+  # set small densities to zero
+  d[d < 1e-5] <- 0
+  
+  # normalize
+  d/sum(d)
+
+}
+
+c14 <- c14 |> 
+  mutate(
+    pdf = purrr::map2(
+      c14_age, 
+      c14_error, 
+      \(x, y) { get_density(x, y, intcal20) }
+    )
+  )
+
+c14
+
+```
+
+This list column is a profoundly inefficient way to store these vectors, as they
+are loaded down with zeroes.
+
+```{r}
+map_int(c14[["pdf"]], \(x){ sum(x==0) }) |> mean()
+
+```
+
+So, it makes sense to drop the zeroes and just keep track of the non-zero 
+values and their index (or ybp) in the vector of densities - in a word, to 
+store them in a sparse matrix, with a column for each year BP and a row for each 
+c14 sample. 
+
+```{r}
+library(Matrix)
+
+M <- Matrix(
+  do.call("rbind", c14[["pdf"]]), 
+  sparse = TRUE
+)
+
+M[1:5, 1:5]
+
+```
+
+This is kinda sorta what **rcarbon** does by default. Unfortunately, they do not 
+take advantage of the base R `{Matrix}` package, which would make all of their
+calculations much faster and more efficient.
+
+## Summed probability distribution
+
+Funny enough, this is just:
+
+```{r}
+D <- colSums(M)
+```
+
+Here's what that looks like:
+
+```{r}
+my_spd <- tibble(
+  ybp = intcal20[["ybp"]],
+  spd = D
+)
+
+ggplot(my_spd) +
+  geom_line(aes(ybp, spd)) +
+  labs(x = "Year [BP]", y = "Probability Density") +
+  theme_bw(12) +
+  theme(panel.grid.minor = element_blank())
+
+```
+
+## Sparse Vectors?
+
+If we wanted to stay in a table environment, we could also try converting each 
+vector to a `sparseVector`. 
+
+```{r}
+to_sparse_vector <- function(x){
+  
+  i <- which(x > 0)
+  
+  Matrix::sparseVector(x[i], i, length = length(x))
+  
+}
+
+c14 <- c14 |> mutate(pdf = purrr::map(pdf, to_sparse_vector))
+
+```
+
+I guess one of the nice things about using the `sparseVector` in a table, is 
+that you can build grouped SPDs using `{dplyr}` and `group_by() |> summarize()`. 
+This requires some work though to build a sparse matrix out of each subset.
+
+```{r}
+sum_sparse_vectors <- function(x){
+  
+  idx <- purrr::map(x, \(z){ z@i })
+  values <- purrr::map(x, \(z){ z@x })
+  
+  nr <- length(x)
+  nc <- length(x[[1]])
+  
+  M <- Matrix::sparseMatrix(
+    i = rep(1:nr, lengths(idx)),
+    j = unlist(idx),
+    x = unlist(values),
+    dims = c(nr, nc)
+  )
+  
+  list(Matrix::colSums(M))
+  
+}
+
+c14 |> 
+  mutate(grp = sample(1:2, size = 10, replace = TRUE)) |> 
+  group_by(grp) |> 
+  summarize(pdf = sum_sparse_vectors(pdf)) |> 
+  ungroup()
+
+```
+
+## Benchmarks
 
 ```{r}
 #| eval: false
 
 library(Bchron)
 library(rcarbon)
-library(rextendr)
 library(rscarbon)
-library(tidyverse)
 
-data(emedyd)
-
-c14 <- emedyd |>
-  as_tibble() |>
-  rename_with(str_to_lower)
-
-rm(emedyd)
-
-ages <- c14$cra
-errors <- c14$error
+ages <- c14[["c14_age"]]
+errors <- c14[["c14_error"]]
 
 bench::mark(
   bchron = Bchron::BchronCalibrate(ages, errors),
   rcarbon = rcarbon::calibrate(ages, errors, verbose = FALSE, ncores = 4),
-  rscarbon = rscarbon::calibrate(ages, errors),
+  rscarbon = rscarbon::rc_calibrate(ages, errors),
   iterations = 100,
   check = FALSE
 ) |> select(expression, median, 'itr/sec')
 
 ```
+
+This is probably not a fair comparison, but the results do look promising.
