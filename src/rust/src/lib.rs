@@ -93,12 +93,20 @@ fn rust_calibrate(
         })
         .collect();
 
-    let mut list = List::from_values(grid);
+    let ids: Vec<i32> = (0..c14_age.len())
+        .step_by(1)
+        .map(|x| x as i32 )
+        .collect();
 
-    list
-        .set_class(vctr_class("CalGrid"))
+    let mut list = List::from_values(ids);
+
+    list.set_class(vctr_class("CalGrid"))
+        .unwrap()
+        .set_attrib("grid", List::from_values(grid))
         .unwrap()
         .set_attrib("cal_name", cal_name)
+        .unwrap()
+        .set_attrib("normalize", normalize)
         .unwrap();
 
     list
