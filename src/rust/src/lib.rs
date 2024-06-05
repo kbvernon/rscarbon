@@ -40,15 +40,15 @@ impl CalDate {
 
     }
 
-    fn mode(x: Self) -> f64 {
+    fn mode(&self) -> f64 {
 
-        let i = x.density.iter()
+        let i = self.density.iter()
             .enumerate()
             .max_by(|a, b| a.partial_cmp(&b).unwrap())
             .map(|(index, _)| index)
             .unwrap();
 
-        x.ybp[i]
+        self.ybp[i]
 
     }
 
@@ -68,8 +68,7 @@ fn rust_calibrate(
 
     let grid: Vec<CalDate> = (c14_age, c14_error)
         .into_par_iter()
-        .enumerate()
-        .map(|(i, (c14_mu, c14_s))| {
+        .map(|(c14_mu, c14_s)| {
 
             let (year, mut density): (Vec<f64>, Vec<f64>) = (cal_age, cal_error)
                 .into_par_iter()
@@ -94,9 +93,15 @@ fn rust_calibrate(
         })
         .collect();
 
-    List::from_values(grid)
+    let mut list = List::from_values(grid);
+
+    list
         .set_class(vctr_class("CalGrid"))
         .unwrap()
+        .set_attrib("cal_name", cal_name)
+        .unwrap();
+
+    list
 
 }
 
@@ -104,21 +109,21 @@ fn dnorm(x: &f64, mean: f64, sd: f64) -> f64 {
 
     let gaussian = Normal::new(mean, sd).unwrap();
 
-    gaussian.pdf(x)
+    gaussian.pdf(*x)
 
 }
 
 fn rescale(x: &mut Vec<f64>) {
 
-    let E = x.iter().sum();
+    let total: f64 = x.iter().sum();
 
-    x.iter_mut().for_each(|y| *y /= E);
+    x.iter_mut().for_each(|y| *y /= total);
 
 }
 
 fn vctr_class(cls: &str) -> [String; 3] {
 
-  let cls = cls.as_str();
+  let cls = cls.into();
 
   let vct = String::from("vctrs_vctr");
 
