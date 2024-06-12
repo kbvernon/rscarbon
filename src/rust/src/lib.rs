@@ -9,6 +9,8 @@ struct CalDate {
 }
 
 #[extendr]
+impl CalDate { }
+
 impl CalDate {
 
     fn new(ybp: Vec<i32>, density: Vec<f64>) -> Self {
@@ -36,8 +38,8 @@ impl CalDate {
 
         let xout: Vec<i32> = (end..=start).rev().collect();
 
-        (self.ybp, self.density) = xout.iter()
-            .map(|&u| {
+        (self.ybp, self.density) = xout.into_iter()
+            .map(|u| {
 
                 let i = self.ybp.partition_point(|&v| v >= u) - 1usize;
 
@@ -68,23 +70,41 @@ impl CalDate {
 
     }
 
-    fn subset(&mut self, start: i32, end: i32) {
+}
 
-        (self.ybp, self.density) = self.ybp
-            .iter()
-            .enumerate()
-            .filter_map(|(i, &x)| {
+#[extendr]
+fn rust_caldate_mode(x: ExternalPtr<CalDate>) -> i32 { x.mode() }
 
-                if x > start || x < end {
-                    None
-                } else {
-                    Some ((self.ybp[i], self.density[i]))
-                }
+#[extendr]
+fn rust_collect(x: List) -> RMatrix<f64> {
 
-            })
-            .unzip();
+    let w = x.get_attrib("window").unwrap().as_integer_vector().unwrap();
+
+    let start = w[0];
+    let end = w[1];
+
+    let nrow = x.len();
+    let ncol: usize = (start - end + 1).try_into().unwrap();
+
+    let mut matrix = RMatrix::new_matrix(nrow, ncol, |_, _| 0.0);
+
+    for (i, u) in x.values().enumerate() {
+
+        let cal_date: ExternalPtr<CalDate> = u.try_into().unwrap();
+
+        let iterator = cal_date.ybp.iter().zip(cal_date.density.iter());
+
+        for (&ybp, &density) in iterator {
+
+            let j: usize = (start - ybp).try_into().unwrap();
+
+            matrix[[i, j]] = density;
+
+        }
 
     }
+
+    matrix
 
 }
 
@@ -95,12 +115,10 @@ fn rust_calibrate_independent_ages(
     ybp: &[i32],
     cal_age: &[i32],
     cal_error: &[i32],
-    start: i32,
-    end: i32,
     precision: f64,
     sum_to_one: bool,
     cal_name: &str
-) -> Integers {
+) -> List {
 
     let grid: Vec<CalDate> = (c14_age, c14_error)
         .into_par_iter()
@@ -112,8 +130,6 @@ fn rust_calibrate_independent_ages(
                 ybp,
                 cal_age,
                 cal_error,
-                start,
-                end,
                 precision,
                 sum_to_one
             )
@@ -121,24 +137,33 @@ fn rust_calibrate_independent_ages(
         })
         .collect();
 
-    let n = grid.len() as i32;
+    let mut v_start = vec![0; grid.len()];
+    let mut v_end = vec![0; grid.len()];
 
-    let ids: Vec<i32> = (0..n).collect();
+    for (i, y) in grid.iter().enumerate() {
 
-    let mut res = Integers::from_values(ids);
+        v_start[i] = *y.ybp.first().unwrap();
+        v_end[i] = *y.ybp.last().unwrap();
 
-    res.set_class(vctr_class("CalGrid"))
-        .unwrap()
-        .set_attrib("grid", List::from_values(grid))
+    }
+
+    let start = v_start.iter().max().unwrap();
+    let end = v_end.iter().min().unwrap();
+
+    let current_window = Integers::from_values(vec![start, end]);
+
+    let mut list = List::from_values(grid);
+
+    list.set_class(vctr_class("CalGrid"))
         .unwrap()
         .set_attrib("cal_name", cal_name)
         .unwrap()
         .set_attrib("normalize", sum_to_one)
         .unwrap()
-        .set_attrib("window", Integers::from_values(vec![start, end]))
+        .set_attrib("window", current_window)
         .unwrap();
 
-    res
+    list
 
 }
 
@@ -148,8 +173,6 @@ fn calibrate_single_age(
     ybp: &[i32],
     cal_age: &[i32],
     cal_error: &[i32],
-    start: i32,
-    end: i32,
     precision: f64,
     sum_to_one: bool
 ) -> CalDate {
@@ -180,8 +203,6 @@ fn calibrate_single_age(
 
     if sum_to_one { new_date.normalize() }
 
-    new_date.subset(start, end);
-
     new_date
 
 }
@@ -206,12 +227,57 @@ fn vctr_class(cls: &str) -> [String; 3] {
 
 }
 
+#[extendr]
+fn rust_spd(x: List) -> RMatrix<f64> {
+
+    let w = x.get_attrib("window").unwrap().as_integer_vector().unwrap();
+
+    let start = w[0];
+    let end = w[1];
+
+    let nrow: usize = (start - end + 1).try_into().unwrap();
+
+    let mut matrix = RMatrix::new_matrix(nrow, 2, |_, _| 0.0);
+
+    for (i, u) in (end..=start).rev().enumerate() {
+
+        matrix[[i, 0usize]] = u as f64;
+
+    }
+
+    for u in x.values() {
+
+        let cal_date: ExternalPtr<CalDate> = u.try_into().unwrap();
+
+        let iterator = cal_date.ybp.iter().zip(cal_date.density.iter());
+
+        for (&ybp, &density) in iterator {
+
+            let i: usize = (start - ybp).try_into().unwrap();
+
+            matrix[[i, 1usize]] += density;
+
+        }
+
+    }
+
+    let dim_names = list!(().into_robj(), &["ybp", "prob_dens"]);
+
+    matrix.set_attrib("dimnames", dim_names).unwrap();
+
+    matrix
+
+}
+
 // Macro to generate exports.
 // This ensures exported functions are registered with R.
 // See corresponding C code in `entrypoint.c`.
 extendr_module! {
     mod rscarbon;
     fn rust_calibrate_independent_ages;
-    // impl CalibrationCurve;
     impl CalDate;
+    fn rust_caldate_mode;
+    fn rust_collect;
+    fn rust_spd;
 }
+
