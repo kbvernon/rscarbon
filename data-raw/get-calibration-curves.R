@@ -6,8 +6,8 @@ get_14c <- function(x){
     file.path("https://intcal.org/", "curves", x),
     skip = 11,
     col_select = 1:3,
-    col_names = c("cal_age", "est_age", "est_error"),
-    col_types = "d"
+    col_names = c("ybp", "cal_age", "cal_error"),
+    col_types = "iii"
   )
 
   vctrs::new_data_frame(

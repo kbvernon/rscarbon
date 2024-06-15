@@ -1,4 +1,3 @@
-
 #' Calibrate radiocarbon measurements
 #'
 #' @param c14_age a numeric vector of uncalibrated radiocarbon ages
@@ -17,7 +16,7 @@
 #'
 #' @examples
 #'
-calibrate <- function(
+rc_calibrate <- function(
   c14_age,
   c14_error,
   calibration_tbl,
@@ -34,20 +33,15 @@ calibrate <- function(
 
   }
 
-  ptr <- rs_calibrate(
-    c14_age = as.numeric(c14_age),
-    c14_error = as.numeric(c14_error),
+  rust_calibrate_independent_ages(
+    c14_age = c14_age,
+    c14_error = c14_error,
+    ybp = calibration_tbl[["ybp"]],
     cal_age = calibration_tbl[["cal_age"]],
-    est_age = calibration_tbl[["est_age"]],
-    est_error = calibration_tbl[["est_error"]],
+    cal_error = calibration_tbl[["cal_error"]],
+    cal_name = attr(calibration_tbl, "cal_name"),
     precision = as.numeric(precision),
-    normalize = normalize
-  )
-
-  vctrs::new_vctr(
-    1:length(c14_age),
-    extptr = ptr,
-    class = "CalGrid"
+    sum_to_one = normalize
   )
 
 }

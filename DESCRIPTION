@@ -17,5 +17,7 @@ Depends:
 LazyData: true
 Imports: 
     cli,
+    pillar,
+    purrr,
     rlang,
-    vctrs
+    vctrs (>= 0.6.5)

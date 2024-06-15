@@ -10,9 +10,21 @@
 #' @useDynLib rscarbon, .registration = TRUE
 NULL
 
-rs_interpolate_linear <- function(x, y, xout) .Call(wrap__rs_interpolate_linear, x, y, xout)
+rust_calibrate_independent_ages <- function(c14_age, c14_error, ybp, cal_age, cal_error, precision, sum_to_one, cal_name) .Call(wrap__rust_calibrate_independent_ages, c14_age, c14_error, ybp, cal_age, cal_error, precision, sum_to_one, cal_name)
 
-rs_calibrate <- function(c14_age, c14_error, cal_age, est_age, est_error, precision, normalize) .Call(wrap__rs_calibrate, c14_age, c14_error, cal_age, est_age, est_error, precision, normalize)
+rust_caldate_mode <- function(x) .Call(wrap__rust_caldate_mode, x)
+
+rust_collect <- function(x) .Call(wrap__rust_collect, x)
+
+rust_spd <- function(x, sum_to_one) .Call(wrap__rust_spd, x, sum_to_one)
+
+CalDate <- new.env(parent = emptyenv())
+
+#' @export
+`$.CalDate` <- function (self, name) { func <- CalDate[[name]]; environment(func) <- environment(); func }
+
+#' @export
+`[[.CalDate` <- `$.CalDate`
 
 
 # nolint end
