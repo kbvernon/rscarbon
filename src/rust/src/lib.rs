@@ -228,22 +228,22 @@ fn vctr_class(cls: &str) -> [String; 3] {
 }
 
 #[extendr]
-fn rust_spd(x: List) -> RMatrix<f64> {
+fn rust_spd(x: List, sum_to_one: bool) -> List {
 
     let w = x.get_attrib("window").unwrap().as_integer_vector().unwrap();
 
     let start = w[0];
     let end = w[1];
 
-    let nrow: usize = (start - end + 1).try_into().unwrap();
+    let nrow = start - end + 1;
 
-    let mut matrix = RMatrix::new_matrix(nrow, 2, |_, _| 0.0);
+    let mut table = List::new(2);
 
-    for (i, u) in (end..=start).rev().enumerate() {
+    let year_bp: Vec<i32> = (end..=start).rev().collect();
 
-        matrix[[i, 0usize]] = u as f64;
+    table.set_elt(0, year_bp.into_robj());
 
-    }
+    let mut spd = vec![0.0; nrow as usize];
 
     for u in x.values() {
 
@@ -255,17 +255,30 @@ fn rust_spd(x: List) -> RMatrix<f64> {
 
             let i: usize = (start - ybp).try_into().unwrap();
 
-            matrix[[i, 1usize]] += density;
+            spd[i] += density;
 
         }
 
     }
 
-    let dim_names = list!(().into_robj(), &["ybp", "prob_dens"]);
+    if sum_to_one {
 
-    matrix.set_attrib("dimnames", dim_names).unwrap();
+      let total: f64 = spd.iter().sum();
 
-    matrix
+      spd.iter_mut().for_each(|y| *y /= total);
+
+    }
+
+    table.set_elt(1, spd.into_robj());
+
+    table.set_names(&["ybp", "prob_dens"]).unwrap();
+    table.set_class(&["tbl_df", "tbl", "data.frame"]).unwrap();
+
+    let row_names: Vec<i32> = (1..=nrow).collect();
+
+    table.set_attrib("row.names", row_names).unwrap();
+
+    table
 
 }
 
@@ -274,8 +287,8 @@ fn rust_spd(x: List) -> RMatrix<f64> {
 // See corresponding C code in `entrypoint.c`.
 extendr_module! {
     mod rscarbon;
-    fn rust_calibrate_independent_ages;
     impl CalDate;
+    fn rust_calibrate_independent_ages;
     fn rust_caldate_mode;
     fn rust_collect;
     fn rust_spd;
