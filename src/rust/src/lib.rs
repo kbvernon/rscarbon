@@ -1,80 +1,54 @@
 use extendr_api::prelude::*;
-use rayon::prelude::*;
-use statrs::distribution::{Continuous, Normal};
 
-#[derive(Debug)]
-struct CalDate {
-    ybp: Vec<i32>,
-    density: Vec<f64>
+mod c14date;
+mod caldate;
+mod calibration;
+// mod dpmm;
+
+use c14date::{C14Date, C14List};
+use caldate::CalGrid;
+use calibration::Calibration;
+
+#[extendr]
+fn rust_make_c14_vctr(estimate: Vec<i32>, error: Vec<i32>) -> List {
+    let dates: Vec<C14Date> = estimate.iter()
+        .zip(error.iter())
+        .map(|(&u, &v)| C14Date::new(u, v))
+        .collect();
+
+    C14List::new(dates).into_list()
 }
 
 #[extendr]
-impl CalDate { }
-
-impl CalDate {
-
-    fn new(ybp: Vec<i32>, density: Vec<f64>) -> Self {
-
-        CalDate { ybp, density }
-
-    }
-
-    fn mode(&self) -> i32 {
-
-        let i = self.density.iter()
-            .enumerate()
-            .max_by(|a, b| a.partial_cmp(&b).unwrap())
-            .map(|(index, _)| index)
-            .unwrap();
-
-        self.ybp[i]
-
-    }
-
-    fn interpolate(&mut self) {
-
-        let start = *self.ybp.iter().max().unwrap();
-        let end = *self.ybp.iter().min().unwrap();
-
-        let xout: Vec<i32> = (end..=start).rev().collect();
-
-        (self.ybp, self.density) = xout.into_iter()
-            .map(|u| {
-
-                let i = self.ybp.partition_point(|&v| v >= u) - 1usize;
-
-                if u == self.ybp[i] { return (u, self.density[i]) }
-
-                if u == self.ybp[i + 1] { return (u, self.density[i + 1]) }
-
-                let x1 = f64::from(self.ybp[i]);
-                let x2 = f64::from(self.ybp[i + 1]);
-
-                let y1 = self.density[i];
-                let y2 = self.density[i + 1];
-
-                let yhat = y1 + (y2 - y1) * ((f64::from(u) - x1) / (x2 - x1));
-
-                (u, yhat)
-
-            })
-            .unzip();
-
-    }
-
-    fn normalize(&mut self) {
-
-        let total: f64 = self.density.iter().sum();
-
-        self.density.iter_mut().for_each(|y| *y /= total);
-
-    }
-
+fn rust_calibrate(
+    x: List, 
+    calibration: Calibration, 
+    precision: f64, 
+    sum_to_one: bool
+) -> List {
+    let c14list: C14List = x.into();
+    let calgrid: CalGrid = c14list.calibrate(
+        &calibration, 
+        precision, 
+        sum_to_one
+    );
+    
+    calgrid.into_list(calibration.name, sum_to_one)
 }
 
 #[extendr]
-fn rust_caldate_mode(x: ExternalPtr<CalDate>) -> i32 { x.mode() }
+fn rust_interpolate_calibration(x: Robj) -> Robj {
+    let mut calibration: Calibration = x.into();
+    calibration.interpolate().into()
+}
 
+#[extendr]
+fn rust_mode(x: List) -> Vec<i32> { 
+    let calgrid: CalGrid = x.into();
+    calgrid.mode()
+ }
+
+/* 
 #[extendr]
 fn rust_collect(x: List) -> RMatrix<f64> {
 
@@ -92,11 +66,11 @@ fn rust_collect(x: List) -> RMatrix<f64> {
 
         let cal_date: ExternalPtr<CalDate> = u.try_into().unwrap();
 
-        let iterator = cal_date.ybp.iter().zip(cal_date.density.iter());
+        let iterator = cal_date.age.iter().zip(cal_date.density.iter());
 
-        for (&ybp, &density) in iterator {
+        for (&age, &density) in iterator {
 
-            let j: usize = (start - ybp).try_into().unwrap();
+            let j: usize = (start - age).try_into().unwrap();
 
             matrix[[i, j]] = density;
 
@@ -107,190 +81,16 @@ fn rust_collect(x: List) -> RMatrix<f64> {
     matrix
 
 }
-
-#[extendr]
-fn rust_calibrate_independent_ages(
-    c14_age: &[i32],
-    c14_error: &[i32],
-    ybp: &[i32],
-    cal_age: &[i32],
-    cal_error: &[i32],
-    precision: f64,
-    sum_to_one: bool,
-    cal_name: &str
-) -> List {
-
-    let grid: Vec<CalDate> = (c14_age, c14_error)
-        .into_par_iter()
-        .map(|(&x, &y)| {
-
-            calibrate_single_age(
-                x,
-                y,
-                ybp,
-                cal_age,
-                cal_error,
-                precision,
-                sum_to_one
-            )
-
-        })
-        .collect();
-
-    let mut v_start = vec![0; grid.len()];
-    let mut v_end = vec![0; grid.len()];
-
-    for (i, y) in grid.iter().enumerate() {
-
-        v_start[i] = *y.ybp.first().unwrap();
-        v_end[i] = *y.ybp.last().unwrap();
-
-    }
-
-    let start = v_start.iter().max().unwrap();
-    let end = v_end.iter().min().unwrap();
-
-    let current_window = Integers::from_values(vec![start, end]);
-
-    let mut list = List::from_values(grid);
-
-    list.set_class(vctr_class("CalGrid"))
-        .unwrap()
-        .set_attrib("cal_name", cal_name)
-        .unwrap()
-        .set_attrib("normalize", sum_to_one)
-        .unwrap()
-        .set_attrib("window", current_window)
-        .unwrap();
-
-    list
-
-}
-
-fn calibrate_single_age(
-    c14_age: i32,
-    c14_error: i32,
-    ybp: &[i32],
-    cal_age: &[i32],
-    cal_error: &[i32],
-    precision: f64,
-    sum_to_one: bool
-) -> CalDate {
-
-    let c14_mu = f64::from(c14_age);
-    let c14_sd2 = f64::from(c14_error).powi(2i32);
-
-    let (year, density): (Vec<i32>, Vec<f64>) = cal_age.iter()
-        .zip(cal_error.iter())
-        .enumerate()
-        .filter_map(|(i, (&u, &v))| {
-
-            let cal_mu = f64::from(u);
-            let cal_sd2 = f64::from(v).powi(2i32);
-
-            let total_error = (c14_sd2 + cal_sd2).sqrt();
-
-            let d = dnorm(c14_mu, cal_mu, total_error);
-
-            if d < precision { None } else { Some ((ybp[i], d)) }
-
-        })
-        .unzip();
-
-    let mut new_date = CalDate::new(year, density);
-
-    new_date.interpolate();
-
-    if sum_to_one { new_date.normalize() }
-
-    new_date
-
-}
-
-fn dnorm(x: f64, mean: f64, sd: f64) -> f64 {
-
-    let gaussian = Normal::new(mean, sd).unwrap();
-
-    gaussian.pdf(x)
-
-}
-
-fn vctr_class(cls: &str) -> [String; 3] {
-
-    let cls = cls.into();
-
-    let vct = String::from("vctrs_vctr");
-
-    let lst = String::from("list");
-
-    [cls, vct, lst]
-
-}
-
-#[extendr]
-fn rust_spd(x: List, sum_to_one: bool) -> List {
-
-    let w = x.get_attrib("window").unwrap().as_integer_vector().unwrap();
-
-    let start = w[0];
-    let end = w[1];
-
-    let nrow = start - end + 1;
-
-    let mut table = List::new(2);
-
-    let year_bp: Vec<i32> = (end..=start).rev().collect();
-
-    table.set_elt(0, year_bp.into_robj());
-
-    let mut spd = vec![0.0; nrow as usize];
-
-    for u in x.values() {
-
-        let cal_date: ExternalPtr<CalDate> = u.try_into().unwrap();
-
-        let iterator = cal_date.ybp.iter().zip(cal_date.density.iter());
-
-        for (&ybp, &density) in iterator {
-
-            let i: usize = (start - ybp).try_into().unwrap();
-
-            spd[i] += density;
-
-        }
-
-    }
-
-    if sum_to_one {
-
-      let total: f64 = spd.iter().sum();
-
-      spd.iter_mut().for_each(|y| *y /= total);
-
-    }
-
-    table.set_elt(1, spd.into_robj());
-
-    table.set_names(&["ybp", "prob_dens"]).unwrap();
-    table.set_class(&["tbl_df", "tbl", "data.frame"]).unwrap();
-
-    let row_names: Vec<i32> = (1..=nrow).collect();
-
-    table.set_attrib("row.names", row_names).unwrap();
-
-    table
-
-}
+*/    
 
 // Macro to generate exports.
 // This ensures exported functions are registered with R.
 // See corresponding C code in `entrypoint.c`.
 extendr_module! {
     mod rscarbon;
-    impl CalDate;
-    fn rust_calibrate_independent_ages;
-    fn rust_caldate_mode;
-    fn rust_collect;
-    fn rust_spd;
+    fn rust_make_c14_vctr;
+    fn rust_calibrate;
+    fn rust_interpolate_calibration;
+    // use dpmm;
 }
 
