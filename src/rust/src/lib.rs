@@ -37,9 +37,10 @@ fn rust_calibrate(
 }
 
 #[extendr]
-fn rust_interpolate_calibration(x: Robj) -> Robj {
-    let mut calibration: Calibration = x.into();
-    calibration.interpolate().into()
+fn rust_interpolate(x: Calibration) -> Calibration {
+    let mut calibration = x;
+    calibration.interpolate();
+    calibration
 }
 
 #[extendr]
@@ -90,7 +91,7 @@ extendr_module! {
     mod rscarbon;
     fn rust_make_c14_vctr;
     fn rust_calibrate;
-    fn rust_interpolate_calibration;
+    fn rust_interpolate;
     // use dpmm;
 }
 
