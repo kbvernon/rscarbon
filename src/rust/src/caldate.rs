@@ -51,7 +51,7 @@ impl CalGrid {
         CalGrid {start, end, grid}
     }
 
-    pub(crate) fn into_list(self, cal_name: &str, sum_to_one: bool) -> List {
+    pub(crate) fn into_list(&self, cal_name: &str, sum_to_one: bool) -> List {
         let w: Vec<i32> = vec![self.start, self.end];
         let current_window = Integers::from_values(w);
         
@@ -69,7 +69,7 @@ impl CalGrid {
         list
     }
 
-    pub(crate) fn sum(self, sum_to_one: bool) -> Robj {
+    pub(crate) fn sum(&self, sum_to_one: bool) -> Robj {
         let year_bp: Vec<i32> = (self.end..=self.start).rev().collect();
         let nrow = year_bp.len() as i32;    
 

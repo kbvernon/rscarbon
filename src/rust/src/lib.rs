@@ -47,7 +47,7 @@ fn rust_interpolate(x: Calibration) -> Calibration {
 fn rust_mode(x: List) -> Vec<i32> { 
     let calgrid: CalGrid = x.into();
     calgrid.mode()
- }
+}
 
 /* 
 #[extendr]
@@ -92,6 +92,7 @@ extendr_module! {
     fn rust_make_c14_vctr;
     fn rust_calibrate;
     fn rust_interpolate;
+    fn rust_mode;
     // use dpmm;
 }
 

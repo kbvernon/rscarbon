@@ -25,7 +25,7 @@ impl C14Date {
     }
 
     pub(crate) fn calibrate(
-        self,
+        &self,
         calibration: &Calibration,
         precision: f64,
         sum_to_one: bool
@@ -75,7 +75,7 @@ impl C14List {
     }
 
     pub(crate) fn calibrate(
-        self,
+        &self,
         calibration: &Calibration,
         precision: f64,
         sum_to_one: bool
@@ -89,16 +89,20 @@ impl C14List {
         grid
     }
 
-    pub(crate) fn into_list(self) -> List {
+    pub(crate) fn get_window(&self) -> Vec<i32> {
         let ages: Vec<i32> = self.dates
             .iter()
             .map(|v| v.age)
             .collect();
         let start: i32 = *ages.iter().max().unwrap();
         let end: i32 = *ages.iter().min().unwrap();
-        let w = vec![start, end];
+        vec![start, end]
+    }
 
+    pub(crate) fn into_list(&self) -> List {        
+        let w: Vec<i32> = self.get_window();
         let current_window = Integers::from_values(w);
+        
         let mut list = List::from_values(self.dates);
 
         list.set_class(["C14List", "vctrs_vctr", "list"])
